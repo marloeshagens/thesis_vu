@@ -17,17 +17,23 @@ rm(list = ls())
 # install.packages("dplyr")
 # install.packages("tseries") # time series
 # install.packages("urca") # contains adf unit root (ur.df) & kpss trend stationarity tests (ur.kpss)
-# install.packages("reshape2") 
+# install.packages("reshape2")
+# install.packages("Java")
+# install.packages("tidyverse") #includes readxl function
+# install.packages(glmnet) #contains LASSO function (Friedman et al., 2010).
 
 library(xlsx)
 library(ggplot2)
 library(moments)
-library(dplyr)
 library(tseries) # time series
 library(urca) # contains adf unit root (ur.df) & kpss trend stationarity tests (ur.kpss)
 library(reshape2) # contains acast function, to reshape df
 library(Synth) # Synthetic Control method
 library(ArCo) # Artificial Counterfactual method
+library(readxl) # from tidyverse
+# library(tidyverse) #complete tidyverse, not necessary
+library(dplyr)
+library(glmnet) #contains LASSO function (Friedman et al., 2010).
 
 ################################################################################  
 ############################ 1. LOAD & PREPARE DATA ############################
