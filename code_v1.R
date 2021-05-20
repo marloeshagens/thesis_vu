@@ -98,7 +98,6 @@ abline(v=2013, col="grey", lty=2, lwd=2)
 # rest of EU
 df_exclGB_aggregate <- aggregate(df_exclGB$verified, by=list(year=df_exclGB$year), FUN=sum, na.rm=TRUE, na.action=NULL)
 df_exclGB_aggregate <- df_exclGB_aggregate[-c(16:26), ]
-#augmented dickey-fueller test - stationarity
 
 plot(ts(df_exclGB_aggregate$x, start = 2005 , end = 2019),
      ylab = "CO2 emissions (t)", xlab = "Year",
@@ -134,7 +133,6 @@ legend("topright",
        lty=1:1, 
        cex=0.8
 )
-
 
 # ADF test (null = unit root) & KPSS test (null = trend stationarity)
 
@@ -196,7 +194,7 @@ plot(ts(df_diff_exclGB, start = 2005 , end = 2019),
 
 
 ################################################################################  
-################################### 3. MODEL ################################### 
+################################### 3. ARCO #################################### 
 ################################################################################  
 
 ###### 3.1. ArCo ######
@@ -245,3 +243,7 @@ arco2 <- fitArCo(data = data, fn = cv.glmnet, p.fn = predict, treated.unit = 1 ,
 plot(arco2,plot=1,display.fitted = TRUE)
 # does not look good either + gives a warning message
 
+
+################################################################################  
+################################### 3. SYNTH ################################### 
+################################################################################  
