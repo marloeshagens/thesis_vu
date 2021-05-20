@@ -30,6 +30,8 @@ library(readxl) # from tidyverse
 library(dplyr)
 library(glmnet) #contains LASSO function (Friedman et al., 2010).
 
+alpha = 0.05
+
 #######
 ###### ArCo on UK CO2 emissions 1990-2018; t0=2013
 
@@ -52,25 +54,105 @@ tdf<- tdf[c(29:1),]
 #tdf<- as.ts(tdf, start = "1990", end = "2018")
 
 # UK with all 27 EU member states + Norway (EEA-EFTA state) 
-# excl. Iceland (EEA-EFTA state) & Liechtenstein (because of NA values and 0 values)
+# excl. Iceland (EEA-EFTA state) & Liechtenstein (because of NA and 0 values)
 data <- subset(tdf,select=
                 c( "United Kingdom","Austria","Belgium","Bulgaria","Croatia",
                    "Cyprus","Czech Republic","Denmark","Estonia","Finland",
                    "France","Germany","Greece","Hungary","Ireland", "Italy",
                    "Latvia","Lithuania","Luxembourg","Malta","Netherlands", 
                    "Poland","Portugal","Romania","Slovakia","Slovenia",
-                   "Spain", "Sweden")) # no "Norway" yet
-data <- list(data)
+                   "Spain", "Sweden")) # no "Norway" yet, maybe add? 
+# data <- subset(data[,-4]) #remove bulgaria
+input <- list(data)
 
 t0 = 24 # 2013 is on row 24
 
 # ArCo first stage is fitted using LASSO (cv.glmnet, predict)
-arco <- fitArCo(data = data,  fn = cv.glmnet, p.fn = predict, treated.unit = 1, t0 = 24, 
-                boot.cf=TRUE,R=200,l=3, VCOV.type = "nw", prewhitening.kernel = TRUE)
-plot(arco, display.fitted=TRUE,confidence.bands = TRUE, alpha = 0.05)
+# glmnet automatically normalizes data & transforms data back (normalization is needed for lasso)
+arco <- fitArCo(data = input,  fn = cv.glmnet, p.fn = predict, 
+                treated.unit = 1, t0 = t0, boot.cf=TRUE,R=200,l=3 
+                #VCOV.type = "nw", prewhitening.kernel = TRUE
+                )
+plot(arco, display.fitted=TRUE,confidence.bands = TRUE, alpha = 0.05, main= "UK ArCo", ylab = "CO2 emissions (MtCO₂e)")
 delta<-arco$delta 
 p<-arco$p.value 
 
+# UNIT ROOT & TREND STATIONARITY TESTS
+adf <- lapply(data, adf.test)
+kpss <- lapply(data, kpss.test, null = "Trend")
+unitroot_table<- function(df){
+  p <- ncol(df)
+  df_stats <- data.frame(var=names(df),
+                         adf.pvalue=sapply(df, function(v) adf.test(ts(v),alternative = "stationary")$p.value),
+                         kpss.pvalue=sapply(df, function(v) kpss.test(ts(v),null = "Trend")$p.value)
+                         )
+  df_stats$unitroot_adf <- ifelse(df_stats$adf.pvalue < 0.05, 0, 1)
+  df_stats$unitroot_kpss <- ifelse(df_stats$kpss.pvalue < 0.05, 1, 0)
+  df_stats$conclusion <- ifelse(df_stats$unitroot_kpss + df_stats$unitroot_adf > 1, 
+                              "contains unit root", "trend stationary or unclear")
+  row.names(df_stats) <- c()
+  df_stats
+}
+tests <- unitroot_table(data) # luxembourg and sweden are trend-stationary
+
+#difference the data
+diff_data <- diff(as.matrix(data))
+diff_tests <- unitroot_table(as.data.frame(diff_data)) # only bulgaria still contains unit root
+diff_data <- subset(diff_data[,-4]) #remove bulgaria
+
+#apply ArCo on  differenced data
+input2 <- list(diff_data)
+arco2 <- fitArCo(data = input2,  fn = cv.glmnet, p.fn = predict, 
+                treated.unit = 1, t0 = 24, boot.cf=TRUE, R=200, l=3, 
+                #VCOV.type = "nw", prewhitening.kernel = TRUE
+                )
+plot(arco2, display.fitted=TRUE,confidence.bands = TRUE, alpha = 0.05, main= "UK ArCo", ylab = "diff. CO2 emissions (MtCO₂e)")
+delta2<-arco2$delta 
+p2<-arco2$p.value 
+p2<0.05 #TRUE 
+
+# mimicking Leroutier's simulation
+# check the reason for the exclusion of some countries
+data_leroutier <- subset(tdf, 
+                select=c("United Kingdom","Austria","Belgium",
+                         "Czech Republic","Denmark","Finland","France",
+                         "Hungary","Ireland", "Italy","Netherlands",
+                         "Poland","Portugal","Slovakia","Spain","Sweden")) 
+diff_data_leroutier <- subset(diff_data, 
+                              select=c("United Kingdom","Austria","Belgium",
+                                       "Czech Republic","Denmark","Finland","France",
+                                       "Hungary","Ireland", "Italy","Netherlands",
+                                       "Poland","Portugal","Slovakia","Spain","Sweden")) 
+input3 <- list(data_leroutier) 
+arco3 <- fitArCo(data = input3, fn = cv.glmnet, p.fn = predict, treated.unit = 1 , t0 = t0)
+plot(arco3, display.fitted=TRUE, alpha = 0.05, main= "UK ArCo - same countries as Leroutier", ylab = "CO2 emissions (MtCO₂e)")
+delta3<-arco3$delta 
+p3<-arco3$p.value 
+p3<alpha #TRUE 
+
+input4 <- list(data_leroutier) 
+arco4 <- fitArCo(data = input4, fn = cv.glmnet, p.fn = predict, treated.unit = 1 , t0 = t0)
+plot(arco4, display.fitted=TRUE, alpha = 0.05, main= "UK ArCo - same countries as Leroutier", ylab = "diff. CO2 emissions (MtCO₂e)")
+delta4<-arco4$delta 
+p4<-arco4$p.value 
+p4<alpha #TRUE 
+
+### PLOTS 
+# # get data out of arco (see plot.arcofit.R file)
+# Y = matrix(arco$data[[1]][, 1], ncol = 1)
+# Y_fit = arco$fitted.values
+# cf=arco$cf
+# boot.cf=arco$boot.cf
+# confidence.bands=TRUE
+# display.fitted=TRUE
+# alpha = 0.05
+# y.min=apply(rbind(Y,cf),2,min,na.rm=TRUE) 
+# y.max=apply(rbind(Y,cf),2,max,na.rm=TRUE)
+# plot(Y, type = "l", xlab = "Time",ylim=c(y.min,y.max))
+#   
+
+
+#######
 # data information: 
 # ELECTRICITY & HEAT (CAIT, 2020)
 # co2 emissions per sector/country/year 
