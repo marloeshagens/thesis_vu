@@ -41,6 +41,8 @@ alpha = 0.05
 # measurement: MtCO_2_e
 
 df <- read.csv("historical_emissions.csv", header = TRUE)
+
+# data format for ArCo
 rownames(df) <- df[,1]
 df <- df[-c(1:5)]
 for (col in 1:ncol(df)){
@@ -130,7 +132,7 @@ delta3<-arco3$delta
 p3<-arco3$p.value 
 p3<alpha #TRUE 
 
-input4 <- list(data_leroutier) 
+input4 <- list(diff_data_leroutier) 
 arco4 <- fitArCo(data = input4, fn = cv.glmnet, p.fn = predict, treated.unit = 1 , t0 = t0)
 plot(arco4, display.fitted=TRUE, alpha = 0.05, main= "UK ArCo - same countries as Leroutier", ylab = "diff. CO2 emissions (MtCO₂e)")
 delta4<-arco4$delta 
