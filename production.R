@@ -87,7 +87,7 @@ arco2 <- fitArCo(data = input2,  fn = cv.glmnet, p.fn = predict,
 plot(arco2, display.fitted=TRUE,confidence.bands = TRUE, alpha = 0.05, main= "Differenced Gross Electricity Production UK ArCo", ylab = "diff. GEP (TJ)")
 delta2<-arco2$delta 
 p2<-arco2$p.value 
-p2<0.05 #TRUE 
+p2<alpha #TRUE 
 
 
 
