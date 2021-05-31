@@ -1,3 +1,7 @@
+setwd("/cloud/project")
+cat("\014")        
+rm(list = ls())
+
 ### SYNTH CONTROL on CO2 EMISSION DATA 
 
 #load data
