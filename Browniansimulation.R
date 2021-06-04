@@ -3,13 +3,6 @@ setwd("/cloud/project")
 cat("\014")        
 rm(list = ls())
 
-#df <- read_excel("test_production_2.xlsx")
-#df<- as.data.frame(df)
-#UK <- df[c(35)]
-# model <- arima(UK, order = c(1,0,1))
-# library(forecast)
-#x <- auto.arima(UK)
-
 set.seed(123)
 library(ArCo) # contains ArCo package
 library(glmnet) #contains LASSO function (Friedman et al., 2010).
