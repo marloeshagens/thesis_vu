@@ -1,4 +1,5 @@
-### ### ### ### ### RANDOM WALK FUNCTION ### ### ### ### ### 
+### ### ### ### ### RANDOM WALK FUNCTION ### ### ### ### ###
+
 # data generating function for a random walk process Y
 # number of periods (T)
 # initial value (x0)
