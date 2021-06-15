@@ -27,29 +27,30 @@ alpha = 0.05
 t0=24
 #treated=33
 
-##### ARCO on GROSS ELECTRICITY PRODUCTION #####
+##### ARCO on GROSS ELECTRICITY PRODUCTION by SOLID FOSSIL FUELS #####
 # data format for ArCo
 rownames(df) <- df[,1]
 data <- df[-c(1:5)]
 
 # prepare data for ArCo
+# Now, all countries are included. Countries may be removed later
 data <- subset(data,select=
                  c( "United Kingdom","Austria","Belgium","Bulgaria","Croatia",
                     "Cyprus","Czechia","Denmark","Estonia","Finland",
                     "France","Germany (until 1990 former territory of the FRG)","Greece","Hungary","Ireland", "Italy",
                     "Latvia","Lithuania","Luxembourg","Malta","Netherlands", 
                     "Poland","Portugal","Romania","Slovakia","Slovenia",
-                    "Spain", "Sweden", "Norway")) # no "Norway" yet, maybe add?
+                    "Spain", "Sweden", "Norway"))  
 data_arco <- list(data)
 
 arco <- fitArCo(data = data_arco,  fn = cv.glmnet, p.fn = predict, 
-                treated.unit = 1, t0 = t0, boot.cf=TRUE,R=200,l=3 
-                #VCOV.type = "nw", prewhitening.kernel = TRUE
-)
-plot(arco, display.fitted=TRUE,confidence.bands = TRUE, alpha = 0.05, main= "Gross Electricity Production UK ArCo", ylab = "GEP (TJ)")
+                treated.unit = 1, t0 = t0, 
+                boot.cf=TRUE, R=1000, l=3, 
+                VCOV.type = "nw", prewhitening.kernel = TRUE)
+plot(arco, display.fitted=TRUE,confidence.bands = TRUE, alpha = 0.05, main= "Gross Electricity Production UK ArCo - Solid Fossil Fuels", ylab = "GEP (TJ)")
 delta<-arco$delta 
 p<-arco$p.value 
-p<alpha
+test <- p<alpha
 
 ###### UNIT ROOT & TREND STATIONARITY TESTS #####
 # UNIT ROOT & TREND STATIONARITY TESTS
@@ -71,7 +72,6 @@ unitroot_table<- function(df){
 tests <- unitroot_table(data) 
 
 ###### DIFFERENCING #####
-
 #difference the data
 diff_data <- diff(as.matrix(data))
 diff_tests <- unitroot_table(as.data.frame(diff_data)) # only bulgaria still contains unit root
@@ -81,19 +81,14 @@ diff_data <- subset(diff_data[,-4]) #remove bulgaria
 #apply ArCo on  differenced data
 input2 <- list(diff_data)
 arco2 <- fitArCo(data = input2,  fn = cv.glmnet, p.fn = predict, 
-                 treated.unit = 1, t0 = 24, boot.cf=TRUE, R=200, l=3, 
-                 #VCOV.type = "nw", prewhitening.kernel = TRUE
-)
-plot(arco2, display.fitted=TRUE,confidence.bands = TRUE, alpha = 0.05, main= "Differenced Gross Electricity Production UK ArCo", ylab = "diff. GEP (TJ)")
+                 treated.unit = 1, t0 = 24, 
+                 boot.cf=TRUE, R=1000, l=3, 
+                 VCOV.type = "nw", prewhitening.kernel = TRUE)
+plot(arco2, display.fitted=TRUE,confidence.bands = TRUE, alpha = 0.05, main= "Differenced Gross Electricity Production UK ArCo - Solid Fossil Fuels", ylab = "diff. GEP (TJ)")
 delta2<-arco2$delta 
 p2<-arco2$p.value 
 p2<alpha #TRUE 
-
-
-
-
-
-
+test2 <- (p2<alpha)
 
 ###### SC ######
 # prepare data for SC
@@ -160,9 +155,11 @@ path.plot(dataprep.res = dataprep.out,
           Xlab = c("Year"), 
           #Ylim = c(0,13), 
           Legend = c("UK","Synthetic UK"),
+          Main = "Gross Electricity Production UK SC - Solid Fossil Fuels"
 ) 
 ## plot the gaps (treated - synthetic)
 gaps.plot(dataprep.res = dataprep.out,
           synth.res = synth.out,
           Ylab = c("Gap in GEP (TJ)"),
-          Xlab = c("Year"))
+          Xlab = c("Year"),
+          Main = "Gaps between GEP in UK and its SC - Solid Fossil Fuels")
