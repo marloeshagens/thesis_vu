@@ -167,7 +167,7 @@ ptm <- proc.time() # start timer
   arcodrift2<- replicate(n=Y, nonstationary_experiment("ArCo", T, N, y0, delta2, variance, R, FALSE))
 
 # differenced RW data - diff = TRUE #
-
+  
   # no drift #
   diff_arco<- replicate(n=Y, nonstationary_experiment("ArCo", T, N, y0, 0, variance, R, TRUE))
   # negative drift #
