@@ -1,8 +1,10 @@
 ### ### ### ### ### RANDOM WALK FUNCTION ### ### ### ### ###
+# July 6 2021 
+# author: M Hagens
 
 # data generating function for a random walk process Y
 # number of periods (T)
-# initial value (x0)
+# initial value (y0)
 # drift (mu) = delta
 # variance of innovation
 
