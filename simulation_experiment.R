@@ -1,192 +1,144 @@
-### ### ### ### ### SIMULATION EXPERIMENT ### ### ### ### ### 
-
-# 24 juni 2021 
-# v6
+##############################################################################
+### ###  NONSTATIONARY TS COUNTERFACTUAL  -  MC SIMULATION EXPERIMENT  ### ###
+##############################################################################
+# July 6 2021 
 # author: M Hagens
 
 setwd("~/Documents/thesis_vu-master")
 cat("\014")        
 rm(list = ls())
 
-##############################################
-############# 0. load functions ##############
-##############################################
+##############################################################################
+############# 0. install & load packages, load functions & Rdata ############# 
+##############################################################################
 
-source("randomwalk.R") # data generating process function #
+# install.packages(ArCo) 
+# install.packages(Synth) 
+# install.packages(glmnet) 
+# install.packages(reshape2) 
+# install.packages(Matrix) 
+# install.packages(xtable)
+# install.packages(writexl)
+
 library(ArCo) # ArCo package #
 library(Synth) # Synthetic Control package #
 library(glmnet) # contains LASSO #
 library(reshape2) # contains melt(), when using SC #
 library(Matrix) # used for colSums #
+library(xtable)
+library(writexl)
+
+# source self-made functions
+source("randomwalk.R") # data generating process function # 
+source("nonstationary_ts_counterfactual.R") # function for the nonstationary time series counterfactual experiment #
+source("percentagesignificant.R") # function that computes the percentages of arco outputs that are significant
+source("arcogaps.R") # function that extracts data from arco output and construct gaps 
 
 set.seed(42)
 
-##############################################
-############# 1. set variables ############### 
-##############################################
-y0=0
-delta1=-0.5
-delta2=0.5
-variance = 1
+# load simulation experiment data #
+# load("arco.Rdata")
+# load("arcodrift1.RData")
+# load("arcodrift2.RData")
+# load("diff_arco.RData")
+# load("diff_arcodrift1.RData")
+# load("diff_arcodrift2.RData")
+# load("sc.Rdata")
+# load("scdrift1.RData")
+# load("scdrift2.RData")
+# load("diff_sc.RData")
+# load("diff_scdrift1.RData")
+# load("diff_scdrift2.RData")
 
-N=20
-T=100 
+##############################################################################
+############################## 1. set variables ##############################  
+##############################################################################
 
-t0=T/2
-tprior <- t0-1
-R = 500 # Number of bootstrap replications in the arco
+# input for the data generating function: random walk process
+y0 = 0 # initial value
+delta1 = -0.5 # negative drift
+delta2 = 0.5 # positive drift
+variance = 1 # variance of innovations
 
-##############################################
-# 2. define count.fact. experiment function  #
-##############################################
+# counterfactual experiment information
+N = 20 # amount of units
+T = 100 # length time series for each unit
+t0 = T/2 # time of "intervention"
+tprior <- t0-1 # time before "intervention"
+R = 500 # Number of bootstrap replications in the ArCo to construct confidence intervals
+Y = 1000 # experiment size, per data category
 
-nonstationary_experiment <- function(model, T, N, y0, delta, variance, R, diff){
-# this function creates a N*T matrix of random walk data, and puts in into a counterfactual method model # 
-# model: either "ArCo" or "SC" #
-# T:  the length of each time series #
-# N: the number of units #
-# delta: the (possible) drift in the random walk # 
-# variance: specifies the random walk's error term distribution #
-# R: if model = "ArCo", R specifies the number of bootstrap replications in the ArCo #
-  
-  # DGP using random walk function # 
-  RW <- ts(replicate(n = N, # number of units 
-                     randomwalk(T, y0, delta, variance))) # produces random walk per unit
-  
-  # if specified, difference the data # 
-  if(diff == TRUE){
-    RW <-diff(RW) 
-    T <- nrow(RW)
-  }
-  
-  # experiment #
-  randomtreated <- sample(1:N, 1)
-  
-    if(model == "ArCo"){ # put dataframe in ArCo format, run and return ArCo
-      list<-list(RW)
-      
-      arco <- fitArCo(data = list,  fn = cv.glmnet, p.fn = predict, 
-                      treated.unit = randomtreated, t0 = t0, 
-                      boot.cf=TRUE, R = R,
-                      VCOV.type = "iid"
-      )
-      
-      # 1. open jpeg file
-      #jpeg("plots/rplot.jpg")
-      # 2. create the plot
-      plot(arco, display.fitted=TRUE,confidence.bands = TRUE, alpha = 0.05, main = "Random Walk ArCo")
-      # 3. close the file
-      #dev.off()
-      
-      return(arco)
-      ls()
-    }
-  
-    if(model == "SC"){ # put dataframe in SC format, run and return SC # 
+##############################################################################
+############### 3. run function & generate experiment results ################
+##############################################################################
 
-      dfLong <- melt(RW, value.name="X") # reshapes data frame for the SC input # 
-      colnames(dfLong) <- c("Time","Unit","X")
-      
-      n <- ncol(RW)
-      t <- nrow(RW)
-      dfLong$unit.num <- rep(c(1:n),each=t) # create a numeric unit variable to indicate which unit is which # 
-      
-      dfLong$Unit <- as.character(dfLong$Unit) # Unit column should be made of characters in order for the SC to work # 
-      
-      donorpool <- rep(c(1:N)) # define donorpool # 
-      donorpool <- donorpool[c(-randomtreated)]
-      
-      # create matrix from panel data that provides input for synth()
-      dataprep.out<-
-        dataprep(
-          foo = dfLong,
-          predictors = "X",
-          predictors.op = "mean", # mean is the default
-          dependent = "X",
-          unit.variable = "unit.num",
-          time.variable = "Time",
-          treatment.identifier = randomtreated,
-          controls.identifier = donorpool,
-          time.predictors.prior = c(1:tprior),
-          time.optimize.ssr = c(1:t0), 
-          unit.names.variable = "Unit", 
-          time.plot = 1:T
-        )
-      
-      # run synth
-      synth <- synth(dataprep.out, method = "BFGS") # why BFGS?
-      #X0 the control cases after the treatment
-      #X1 the control case before the treatment
-      #Z1 the treatment case before the treatment
-      #Z0 the treatment case after the treatment
-      
-      # calculate difference in trend between simulated data and its synthetic control
-      gaps <- dataprep.out$Y1plot - (dataprep.out$Y0plot %*% synth$solution.w)
-      #print(gaps[1:3, 1]) 
-      
-      # pre built tables from synth objects
-      synth.tables <- synth.tab(dataprep.res = dataprep.out,synth.res = synth)
-      names(synth.tables) 
+# model = "ArCo" #
 
-      # plot treatment vs control outcomes for pre and post periods
-      path.plot(synth.res = synth, dataprep.res = dataprep.out,
-                Ylab = "Value", Xlab = "Time",
-                Legend = c("Random Walk","Synthetic Control"), 
-                Legend.position = "bottomright",
-                Main = "Simulated RW data and its SC")
-      
-      # gap plot
-      gaps.plot(synth.res = synth, dataprep.res = dataprep.out,
-                Ylab = "Value", Xlab = "Time",
-                Main = "Gap between RW and SC")
-      
-      return(synth)
-      ls()
-  }
-}
-
-##############################################
-# 3. run func. & generate experiment results #
-##############################################
-
-# experiment sample size, per category #
-Y=1000
-
-############### model = "ArCo" ############### 
-
-ptm <- proc.time() # start timer
+ptm <- proc.time() # start ArCo timer
 
 # 'normal' RW data - diff = FALSE #
 
   # no drift #
-  arco<- replicate(n=1000, nonstationary_experiment("ArCo", T, N, y0, 0, variance, R, FALSE))
-  time_arco <- proc.time() - ptm # stop timer
+  arco<- replicate(n=Y, nonstationary_ts_counterfactual("ArCo", T, N, y0, 0, variance, R, FALSE))
+  save(arco, file="arco.RData")
   # negative drift #
-  arcodrift1<- replicate(n=Y, nonstationary_experiment("ArCo", T, N, y0, delta1, variance, R, FALSE))
+  arcodrift1<- replicate(n=Y, nonstationary_ts_counterfactual("ArCo", T, N, y0, delta1, variance, R, FALSE))
+  save(arcodrift1, file="arcodrift1.RData")
   # positive drift #
-  arcodrift2<- replicate(n=Y, nonstationary_experiment("ArCo", T, N, y0, delta2, variance, R, FALSE))
+  arcodrift2<- replicate(n=Y, nonstationary_ts_counterfactual("ArCo", T, N, y0, delta2, variance, R, FALSE))
+  save(arcodrift2, file="arcodrift2.RData")
 
 # differenced RW data - diff = TRUE #
-  
+
   # no drift #
-  diff_arco<- replicate(n=Y, nonstationary_experiment("ArCo", T, N, y0, 0, variance, R, TRUE))
+  diff_arco<- replicate(n=Y, nonstationary_ts_counterfactual("ArCo", T, N, y0, 0, variance, R, TRUE))
+  save(diff_arco, file="diff_arco.RData")
   # negative drift #
-  diff_arcodrift1<- replicate(n=Y, nonstationary_experiment("ArCo", T, N, y0, delta1, variance, R, TRUE))
+  diff_arcodrift1<- replicate(n=Y, nonstationary_ts_counterfactual("ArCo", T, N, y0, delta1, variance, R, TRUE))
+  save(diff_arcodrift1, file="diff_arcodrift1.RData")
   # positive drift #
-  diff_arcodrift2<- replicate(n=Y, nonstationary_experiment("ArCo", T, N, y0, delta2, variance, R, TRUE))
+  diff_arcodrift2<- replicate(n=Y, nonstationary_ts_counterfactual("ArCo", T, N, y0, delta2, variance, R, TRUE))
+  save(diff_arcodrift2, file="diff_arcodrift2.RData")
+
+time_arco <- proc.time() - ptm # stop ArCo timer
+
+# model = "SC" #
+
+ptm <- proc.time() # start SC timer
+
+# 'normal' RW data - diff = FALSE #
+
+  # no drift #
+  sc <- replicate(n=Y, nonstationary_ts_counterfactual("SC", T, N, y0, 0, variance, R, FALSE))
+  save(sc, file="sc.RData")
+  # negative drift #
+  scdrift1 <- replicate(n=Y, nonstationary_ts_counterfactual("SC", T, N, y0, delta1, variance, R, FALSE))
+  save(scdrift1, file="scdrift1.RData")
+  # positive drift #
+  scdrift2 <- replicate(n=Y, nonstationary_ts_counterfactual("SC", T, N, y0, delta2, variance, R, FALSE))
+  save(scdrift2, file="scdrift2.RData")
+
+# differenced RW data - diff = TRUE #
+
+  # no drift #
+  diff_sc <- replicate(n=Y, nonstationary_ts_counterfactual("SC", T, N, y0, 0, variance, R, TRUE))
+  save(diff_sc, file="diff_sc.RData")
+  # negative drift #
+  diff_scdrift1 <- replicate(n=Y, nonstationary_ts_counterfactual("SC", T, N, y0, delta1, variance, R, TRUE))
+  save(diff_scdrift1, file="diff_scdrift1.RData")
+  # positive drift #
+  diff_scdrift2 <- replicate(n=Y, nonstationary_ts_counterfactual("SC", T, N, y0, delta2, variance, R, TRUE))
+  save(diff_scdrift2, file="drift_scdrift2.RData")
+
+time_sc <- proc.time() - ptm # stop SC timer
+
+##############################################################################
+################################# 4. results #################################  
+##############################################################################
 
 # percentage of significant ArCo results on (differenced) Random Walks, for Y=1000 per category # 
-  
-alpha <- c(0.001, 0.01, 0.05, 0.1)
 
-percentagesignificant <- function(arcooutput, alpha){
-  test <- matrix(NA, length(arcooutput["p.value",]), length(alpha))
-  for (i in 1:length(alpha)) {
-    test[,i] <- (arcooutput["p.value",] < alpha[i])
-  }
-  percentage_true <- colSums(test == TRUE)/nrow(test)
-  return(percentage_true)
-}
+alpha <- c(0.001, 0.01, 0.05, 0.1)
 
 test0 <- percentagesignificant(arco, alpha)
 test1 <- percentagesignificant(arcodrift1, alpha)
@@ -202,144 +154,148 @@ colnames(diff_tests)<- alpha
 
 rm(test0,test1,test2,diff_test0,diff_test1,diff_test2)
 
-rbind(tests, diff_tests)
+rbind(tests, diff_tests) # probability of rejections for normal data and first difference data
+colSums(tests)/3 # average probability of rejections for normal data
+colSums(diff_tests)/3 # average probability of rejections for first diff data
 
-time_arco <- proc.time() - ptm # stop timer
+# extract ArCo delta's #
+delta_arco<- arco["delta",]
+delta_arcodrift1<- arcodrift1["delta",]
+delta_arcodrift2<- arcodrift2["delta",]
+delta_diff_arco<- diff_arco["delta",]
+delta_diff_arcodrift1<- diff_arcodrift1["delta",]
+delta_diff_arcodrift2<- diff_arcodrift2["delta",]
 
-################ model = "SC" ################ 
+# compare ArCo & SC magnitudes by comparing gaps (gaps w.r.t. original simulated data Y1) #
 
-ptm <- proc.time()
+# construct gaps per arco
+gaps_arco <- arcogaps(arco, diff=FALSE)
+gaps_arcodrift1 <- arcogaps(arcodrift1, diff=FALSE)
+gaps_arcodrift2 <- arcogaps(arcodrift2, diff=FALSE)
+gaps_diff_arco <- arcogaps(diff_arco, diff=TRUE)
+gaps_diff_arcodrift1 <- arcogaps(diff_arcodrift1, diff=TRUE)
+gaps_diff_arcodrift2 <- arcogaps(diff_arcodrift2, diff=TRUE)
 
-# 'normal' RW data - diff = FALSE #
+# sc
+# construct gaps per sc
+gaps_sc <- as.data.frame(sc["gaps",])
+gaps_scdrift1 <- as.data.frame(scdrift1["gaps",])
+gaps_scdrift2 <- as.data.frame(scdrift2["gaps",])
+gaps_diff_sc <- as.data.frame(diff_sc["gaps",])
+gaps_diff_scdrift1 <- as.data.frame(diff_scdrift1["gaps",])
+gaps_diff_scdrift2 <- as.data.frame(diff_scdrift2["gaps",])
 
-  # no drift #
-  sc<- replicate(n=Y, nonstationary_experiment("SC", T, N, y0, 0, variance, R, FALSE))
-  # negative drift #
-  scdrift1<- replicate(n=Y, nonstationary_experiment("SC", T, N, y0, delta1, variance, R, FALSE))
-  # positive drift #
-  scdrift2<- replicate(n=Y, nonstationary_experiment("SC", T, N, y0, delta2, variance, R, FALSE))
+# take sums over all gaps
+# for each category within arco and SC: sum over T, for all Y=1000 simulations
+# arco 
+sum_gaps_arco <- colSums(gaps_arco) # each gap is small delta
+sum_gaps_arcodrift1 <- colSums(gaps_arcodrift1)
+sum_gaps_arcodrift2 <- colSums(gaps_arcodrift2)
+sum_gaps_diff_arco <- colSums(gaps_diff_arco) 
+sum_gaps_diff_arcodrift1 <- colSums(gaps_diff_arcodrift1)
+sum_gaps_diff_arcodrift2 <- colSums(gaps_diff_arcodrift2)
 
-# differenced RW data - diff = TRUE #
+# sc
+sum_gaps_sc <- colSums(gaps_sc) 
+sum_gaps_scdrift1 <- colSums(gaps_scdrift1)
+sum_gaps_scdrift2 <- colSums(gaps_scdrift2)
+sum_gaps_diff_sc <- colSums(gaps_diff_sc) 
+sum_gaps_diff_scdrift1 <- colSums(gaps_diff_scdrift1)
+sum_gaps_diff_scdrift2 <- colSums(gaps_diff_scdrift2)
 
-  # no drift #
-  drift_sc<- replicate(n=Y, nonstationary_experiment("SC", T, N, y0, 0, variance, R, TRUE))
-  # negative drift #
-  drift_scdrift1<- replicate(n=Y, nonstationary_experiment("SC", T, N, y0, delta1, variance, R, TRUE))
-  # positive drift #
-  drift_scdrift2<- replicate(n=Y, nonstationary_experiment("SC", T, N, y0, delta2, variance, R, TRUE))
+# plot sums of gaps (= total surface of gaps)
+par(mfrow = c(3, 2))  # 3 rows and 2 columns  
 
-time_sc <- proc.time() - ptm # stop timer
+# arco
+plot(sum_gaps_arco)
+plot(sum_gaps_diff_arco)
+plot(sum_gaps_arcodrift1)
+plot(sum_gaps_diff_arcodrift1)
+plot(sum_gaps_arcodrift2)
+plot(sum_gaps_diff_arcodrift2)
 
-##############################################
-###### 4. compare ArCo & SC magnitudes #######
-##############################################
+hist(sum_gaps_arco)
+hist(sum_gaps_diff_arco)
+hist(sum_gaps_arcodrift1)
+hist(sum_gaps_diff_arcodrift1)
+hist(sum_gaps_arcodrift2)
+hist(sum_gaps_diff_arcodrift2)
 
-#extract delta's
-arco_delta<- arco["delta",]
-arcodrift1_delta<- arcodrift1["delta",]
-arcodrift2_delta<- arcodrift2["delta",]
+# sc
+plot(sum_gaps_sc)
+plot(sum_gaps_diff_sc)
+plot(sum_gaps_scdrift1)
+plot(sum_gaps_diff_scdrift1)
+plot(sum_gaps_scdrift2)
+plot(sum_gaps_diff_scdrift2)
 
-diff_arco_delta<- diff_arco["delta",]
-diff_arcodrift1_delta<- diff_arcodrift1["delta",]
-diff_arcodrift2_delta<- diff_arcodrift2["delta",]
+hist(sum_gaps_sc)
+hist(sum_gaps_diff_sc)
+hist(sum_gaps_scdrift1)
+hist(sum_gaps_diff_scdrift1)
+hist(sum_gaps_scdrift2)
+hist(sum_gaps_diff_scdrift2)
 
-# drift_sc_delta<- drift_sc["delta",]
-# drift_scdrift1_delta<- drift_scdrift1["delta",]
-# drift_scdrift2_delta<- drift_scdrift2["delta",]
-# sc_delta<- sc["delta",]
-# scdrift1_delta<- scdrift1["delta",]
-# scdrift2_delta<- scdrift2["delta",]
+# sum difference per category
+# the mean reported in the t-tests below is NOT the same as the mean ATET (=Delta_t) over all Y's 
+# this will be performed below for completeness
+# however: the results (t-tests and p-values) are the same, the means are just different.
+# the mean reported in the t-tests below is the mean over all Y's of the SUM of all gaps  (=sum(delta_t)) 
 
+# 1. simple RW
+t1 <- t.test(sum_gaps_arco, sum_gaps_sc)
+# 2. RW + negative drift
+t2 <- t.test(sum_gaps_arcodrift1, sum_gaps_scdrift1)
+# 3. RW + positive drift 
+t3 <- t.test(sum_gaps_arcodrift2, sum_gaps_scdrift2)
+# 4. simple RW, first difference
+t4 <- t.test(sum_gaps_diff_arco, sum_gaps_diff_sc)
+# 5. RW + negative drift, first difference
+t5 <- t.test(sum_gaps_diff_arcodrift1, sum_gaps_diff_scdrift1)
+# 6. RW + positive drift, first difference    
+t6 <- t.test(sum_gaps_diff_arcodrift2, sum_gaps_diff_scdrift2) 
 
-# pick a random dataset and plot the ArCo and the SC #
-# maybe put this in an entirely different code? at least, at the bottom
-# works for the non-differenced way 
-synthcf=dataprep.out$Y0plot%*%synth$solution.w
-plot(dataprep.out$Y1plot,type="l",ylab="Y",xlab="Time")
-lines(synthcf,col=2)
-abline(v=50,col=4,lty=2)
-lines(c(fitted(arco)[,1], arco$cf[,1]),col=4)
-legend("bottomleft",legend=c("Y","Synth","ArCo"),
-       col=c(1,2,4),
-       cex = 1,
-       seg.len = 1,bty = "n",lty=1)
-
-# save results 
-# write.csv(arco,'arco.csv')
-# write.csv(arcodrift1,'arcodrift1.csv')
-# write.csv(arcodrift2,'arcodrift2.csv')
-
-
-# prop.test(80, 100, p = 0, alternative = "two.sided", correct = TRUE)
-# prop.test(85, 100, p = 0, alternative = "two.sided", correct = TRUE)
-# prop.test(88, 100, p = 0, alternative = "two.sided", correct = TRUE)
-# prop.test(89, 100, p = 0, alternative = "two.sided", correct = TRUE)
-# 
-# prop.test(79, 100, p = 0, alternative = "two.sided", correct = TRUE)
-# prop.test(84, 100, p = 0, alternative = "two.sided", correct = TRUE)
-# prop.test(90, 100, p = 0, alternative = "two.sided", correct = TRUE)
-# prop.test(90, 100, p = 0, alternative = "two.sided", correct = TRUE)
-# 
-# prop.test(0, 100, p = 0.1, alternative = "two.sided", correct = TRUE)
-# prop.test(2, 100, p = 0.1, alternative = "two.sided", correct = TRUE)
-# prop.test(4, 100, p = 0.1, alternative = "two.sided", correct = TRUE)
-# prop.test(9, 100, p = 0.1, alternative = "two.sided", correct = TRUE)
+#bind tests in a table
+t.tests.sum<-as.data.frame(rbind(t1, t2, t3, t4, t5, t6))
+# write_xlsx(t.tests.sum, 't.tests.SUM.xlsx')
 
 
-# #### old notation significance tests ####
-# arco_test_0.001 <- (arco["p.value",]   < alpha[1])
-# arco_test_0.01 <- (arco["p.value",]   < alpha[2])
-# arco_test_0.05 <- (arco["p.value",]   < alpha[3])
-# arco_test_0.10 <- (arco["p.value",]   < alpha[4])
-# arco_test<- cbind(arco_test_0.001, arco_test_0.01, arco_test_0.05,  arco_test_0.10)
-# test0<- colSums(arco_test == TRUE)/nrow(arco_test)*100 #colSums(arcodrift1_test, na.rm = TRUE)/nrow(arcodrift1_test)*100
-# 
-# arcodrift1_test_0.001 <- (arcodrift1["p.value",]   < alpha[1])
-# arcodrift1_test_0.01 <- (arcodrift1["p.value",]   < alpha[2])
-# arcodrift1_test_0.05 <- (arcodrift1["p.value",]   < alpha[3])
-# arcodrift1_test_0.10 <- (arcodrift1["p.value",]   < alpha[4])
-# arcodrift1_test<- cbind(arcodrift1_test_0.001, arcodrift1_test_0.01, arcodrift1_test_0.05,  arcodrift1_test_0.10)
-# test1<- colSums(arcodrift1_test == TRUE)/nrow(arcodrift1_test)*100 #colSums(arcodrift1_test, na.rm = TRUE)/nrow(arcodrift1_test)*100
-# 
-# arcodrift2_test_0.001 <- (arcodrift2["p.value",]   < alpha[1])
-# arcodrift2_test_0.01 <- (arcodrift2["p.value",]   < alpha[2])
-# arcodrift2_test_0.05 <- (arcodrift2["p.value",]   < alpha[3])
-# arcodrift2_test_0.10 <- (arcodrift2["p.value",]   < alpha[4])
-# arcodrift2_test<- cbind(arcodrift2_test_0.001, arcodrift2_test_0.01, arcodrift2_test_0.05,  arcodrift2_test_0.10)
-# test2<- colSums(arcodrift2_test == TRUE)/nrow(arcodrift2_test)*100
-# 
-# TESTS <- rbind(test0,test1,test2)
-# colnames(TEST)<- alpha
-# rm(test0,test1,test2)
-# 
-# diff_arco_test_0.001 <- (diff_arco["p.value",]   < alpha[1])
-# diff_arco_test_0.01 <- (diff_arco["p.value",]   < alpha[2])
-# diff_arco_test_0.05 <- (diff_arco["p.value",]   < alpha[3])
-# diff_arco_test_0.10 <- (diff_arco["p.value",]   < alpha[4])
-# diff_arco_test<- cbind(diff_arco_test_0.001, diff_arco_test_0.01, diff_arco_test_0.05,  diff_arco_test_0.10)
-# difftest0 <- colSums(diff_arco_test == TRUE)/nrow(diff_arco_test)*100
-# 
-# diff_arcodrift1_test_0.001 <- (diff_arcodrift1["p.value",]   < alpha[1])
-# diff_arcodrift1_test_0.01 <- (diff_arcodrift1["p.value",]   < alpha[2])
-# diff_arcodrift1_test_0.05 <- (diff_arcodrift1["p.value",]   < alpha[3])
-# diff_arcodrift1_test_0.10 <- (diff_arcodrift1["p.value",]   < alpha[4])
-# diff_arcodrift1_test<- cbind(diff_arcodrift1_test_0.001, diff_arcodrift1_test_0.01, diff_arcodrift1_test_0.05,  diff_arcodrift1_test_0.10)
-# difftest1<- colSums(diff_arcodrift1_test == TRUE)/nrow(diff_arcodrift1_test)*100 
-# 
-# diff_arcodrift2_test_0.001 <- (diff_arcodrift2["p.value",]   < alpha[1])
-# diff_arcodrift2_test_0.01 <- (diff_arcodrift2["p.value",]   < alpha[2])
-# diff_arcodrift2_test_0.05 <- (diff_arcodrift2["p.value",]   < alpha[3])
-# diff_arcodrift2_test_0.10 <- (diff_arcodrift2["p.value",]   < alpha[4])
-# diff_arcodrift2_test<- cbind(diff_arcodrift2_test_0.001, diff_arcodrift2_test_0.01, diff_arcodrift2_test_0.05,  diff_arcodrift2_test_0.10)
-# difftest2<- colSums(diff_arcodrift2_test == TRUE)/nrow(diff_arcodrift2_test)*100
-# 
-# diffTESTS <- rbind(difftest0,difftest1,difftest2)
-# colnames(diffTESTS)<- alpha
-# rm(difftest0,difftest1,difftest2)
-# 
-# difftest0 <- percentagesignificant(diff_arco, alpha)
-# difftest1 <- percentagesignificant(diff_arcodrift1, alpha)
-# difftest2 <- percentagesignificant(diff_arcodrift2, alpha)
-# diffTESTS <- rbind(difftest0,difftest1,difftest2)
-# colnames(diffTESTS)<- alpha
-# rm(test0,test1,test2)
+# ATET difference per category # 
+# ATET=Delta_t= 1/(T-T0+1) sum_{t=T0}^T delta_t, where delta_t is the gap at each t.    
+# the mean reported in the t-tests below is the mean over all Y's all Delta_t's
+
+# ATET per data category & per simulation
+# arco 
+Delta_t_arco <- sum_gaps_arco/(T-t0+1) # ATET per simulation # note how this is the same as function delta
+Delta_t_arcodrift1<-sum_gaps_arcodrift1/(T-t0+1)
+Delta_t_arcodrift2<-sum_gaps_arcodrift2/(T-t0+1)
+
+Delta_t_diff_arco <- sum_gaps_diff_arco/(T-t0) # -1 because of of first difference 
+Delta_t_diff_arcodrift1<-sum_gaps_diff_arcodrift1/(T-t0)
+Delta_t_diff_arcodrift2<-sum_gaps_diff_arcodrift2/(T-t0)
+
+# sc
+Delta_t_sc <- sum_gaps_sc/(T-t0+1) # ATET per simulation
+Delta_t_scdrift1<-sum_gaps_scdrift1/(T-t0+1)
+Delta_t_scdrift2<-sum_gaps_scdrift2/(T-t0+1)
+
+Delta_t_diff_sc <- sum_gaps_diff_sc/(T-t0) # -1 because of of first difference 
+Delta_t_diff_scdrift1<-sum_gaps_diff_scdrift1/(T-t0)
+Delta_t_diff_scdrift2<-sum_gaps_diff_scdrift2/(T-t0)
+
+# 1. simple RW
+t1.ATET <- t.test(Delta_t_arco, Delta_t_sc)
+# 2. RW + negative drift
+t2.ATET <- t.test(Delta_t_arcodrift1, Delta_t_scdrift1)
+# 3. RW + positive drift 
+t3.ATET <- t.test(Delta_t_arcodrift2, Delta_t_scdrift2)
+# 4. simple RW, first difference
+t4.ATET <- t.test(Delta_t_diff_arco, Delta_t_diff_sc)
+# 5. RW + negative drift, first difference
+t5.ATET <- t.test(Delta_t_diff_arcodrift1, Delta_t_diff_scdrift1)
+# 6. RW + positive drift, first difference    
+t6.ATET <- t.test(Delta_t_diff_arcodrift2, Delta_t_diff_scdrift2)
+
+# bind tests in a table
+t.tests.ATET<-as.data.frame(rbind(t1.ATET, t2.ATET, t3.ATET, t4.ATET, t5.ATET, t6.ATET))
+# write_xlsx(t.tests.ATET, 't.tests.ATET.xlsx')
